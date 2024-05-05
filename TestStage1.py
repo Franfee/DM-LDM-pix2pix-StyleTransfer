@@ -13,8 +13,8 @@ from training.get_dataLoader_contentA import get_data_loader
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 
-DEPOCH = 1
-CEPOCH = 1
+DEPOCH = 0
+CEPOCH = 0
 
 
 #----------------------------------------------------------------------------
@@ -60,6 +60,7 @@ def main():
     vae.requires_grad_(False)
     
     # 扩散模型
+    print("build diffusion UNet")
     diffusion = UNet()
     diffusion.load_state_dict(torch.load(os.path.join("result", "model", f"{DEPOCH}.diffusion.ckpt"), map_location="cpu"))
 
@@ -67,6 +68,7 @@ def main():
     edm.to(DEVICE)
     
     # 内容模块
+    print("build Content Condition")
     contentEncoder = ContentEmb()
     contentEncoder.load_state_dict(torch.load(os.path.join("result", "model", f"{CEPOCH}.contentEncoder.ckpt"), map_location="cpu"))
     contentEncoder.to(DEVICE)
@@ -77,15 +79,19 @@ def main():
     contentEncoder.eval()
     contentEncoder.requires_grad_(False)
 
-    dataset_iterator = iter(get_data_loader(mode="test", bathsize=1))
+    # 
+    print("build data_loader")
+    dataset_iterator = iter(get_data_loader(mode="train", bathsize=1))
 
 
     for batch_seeds in range(999):
+        print(f"in sampling {batch_seeds}")
         data = next(dataset_iterator)
         gt, content = data['lantent'].to(DEVICE), data['content'].to(DEVICE)
 
+        save_samples(content, [batch_seeds], "result"+"/cn512")
         # seed
-        rnd = StackedRandomGenerator(DEVICE, batch_seeds)
+        rnd = StackedRandomGenerator(DEVICE, [batch_seeds])
         latents = rnd.randn([1, 4, 64, 64], device=DEVICE)
         
         # 内容条件
@@ -93,9 +99,9 @@ def main():
         de = edm_sampler(net=edm, latents=latents, condition=(c_emb,None))
 
         gt_img = vae.decoder(gt)
+        save_samples(gt_img, [batch_seeds], "result"+"/gt512")
         de_img = vae.decoder(de)
-        save_samples(gt_img, batch_seeds, "result"+"/gt512")
-        save_samples(de_img, batch_seeds, "result"+"/de512")
+        save_samples(de_img, [batch_seeds], "result"+"/de512")
 
 
 if __name__ == "__main__":
